@@ -57,10 +57,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, webui.page("Call Sheet", webui.callsheet_body(cards),
                                                   self.cfg, active="callsheet"))
             if path == "/leads":
-                flt = (qs.get("f", ["qualified"])[0])
+                flt = qs.get("f", ["qualified"])[0]
+                params = {k: v[0] for k, v in qs.items()}
                 with db.connect() as conn:
-                    body = webui.leads_body(conn, flt)
+                    body = webui.leads_body(conn, flt, params)
                 return self._send(200, webui.page("Leads", body, self.cfg, active="leads"))
+            if path == "/settings":
+                return self._send(200, webui.page("Settings", webui.settings_body(self.cfg),
+                                                  self.cfg, active="settings"))
             if path.startswith("/lead/"):
                 lead_id = int(path.rsplit("/", 1)[1])
                 with db.connect() as conn:
@@ -108,9 +112,53 @@ class Handler(BaseHTTPRequestHandler):
                     res = write.write_one(conn, lid, self.cfg, out_day, dry_run=False)
                 log.info("wrote draft for lead %s", lid)
                 return self._send(200, json.dumps({"ok": bool(res)}), "application/json")
+            if self.path == "/settings":
+                from .common import save_config
+                Handler.cfg = save_config(payload)   # persist + refresh running config
+                log.info("settings saved (%d fields)", len(payload))
+                return self._send(200, json.dumps({"ok": True}), "application/json")
+            if self.path == "/lead-action":
+                return self._lead_action(int(payload["lead_id"]), str(payload["action"]))
             return self._send(404, '{"ok":false}', "application/json")
         except Exception as e:
             log.error("POST %s failed: %s", self.path, e)
+            return self._send(400, json.dumps({"ok": False, "error": str(e)}), "application/json")
+
+
+    def _lead_action(self, lead_id: int, action: str):
+        from . import audit as audit_mod, score as score_mod
+        from .callsheet import append_suppression
+        from .common import PoliteFetcher, load_exclude_domains
+        try:
+            with db.connect() as conn:
+                lead = conn.execute("SELECT * FROM leads WHERE id=?", (lead_id,)).fetchone()
+                if not lead:
+                    return self._send(404, '{"ok":false}', "application/json")
+                lead = dict(lead)
+                if action == "suppress":
+                    append_suppression(lead["root_domain"], lead["phone"] or "", "suppressed from web app")
+                    conn.execute("DELETE FROM scores WHERE lead_id=?", (lead_id,))
+                    db.set_lead_status(conn, lead_id, "suppressed")
+                    log.info("suppressed lead %s", lead["root_domain"])
+                    return self._send(200, '{"ok":true}', "application/json")
+            if action == "reaudit":
+                crawl = self.cfg.get("crawl", {})
+                fetcher = PoliteFetcher(rps=crawl.get("requests_per_second_per_domain", 1),
+                                        timeout=crawl.get("timeout_seconds", 15))
+                a = audit_mod.audit_one(fetcher, lead, self.cfg, do_screenshot=False,
+                                        do_psi=bool(crawl.get("pagespeed", False)))
+                with db.connect() as conn:
+                    db.save_audit(conn, lead_id, a)
+                    audit_row = dict(db.audit_for(conn, lead_id))
+                    result = score_mod.score_lead(lead, audit_row, self.cfg, load_exclude_domains())
+                    db.save_score(conn, lead_id, result)
+                    db.set_lead_status(conn, lead_id, "scored")
+                log.info("re-audited lead %s (%d findings)", lead["root_domain"],
+                         len(json.loads(a["findings_json"])))
+                return self._send(200, '{"ok":true}', "application/json")
+            return self._send(400, '{"ok":false,"error":"unknown action"}', "application/json")
+        except Exception as e:
+            log.error("lead-action %s failed: %s", action, e)
             return self._send(400, json.dumps({"ok": False, "error": str(e)}), "application/json")
 
 

@@ -45,7 +45,10 @@ def _parse(name: str, url: str, status=200) -> dict:
         "http_status": status, "final_url": final,
         "https_ok": int(final.startswith("https://")), "redirect_chain": "",
         "is_wordpress": int("wp-content" in html or "WordPress" in html),
-        "wp_version": (audit.WPVER_RE.search(html).group(1) if audit.WPVER_RE.search(html) else ""),
+        "wp_version": (audit.WP_VER_RE.search(html).group(1) if audit.WP_VER_RE.search(html) else ""),
+        "_has_og": bool(audit.OG_RE.search(html)), "_has_favicon": bool(audit.FAVICON_RE.search(html)),
+        "_has_h1": bool(audit.H1_RE.search(html)), "_styles": len(audit.STYLESHEET_RE.findall(html)),
+        "_dated_markup": bool(audit.DATED_MARKUP_RE.search(html)),
         "has_viewport": int(bool(audit.VIEWPORT_RE.search(html))),
         "footer_year": (int(audit.YEAR_RE.search(html).group(1)) if audit.YEAR_RE.search(html) else None),
         "page_weight": len(html.encode()),
@@ -53,8 +56,8 @@ def _parse(name: str, url: str, status=200) -> dict:
         "internal_links": audit.internal_link_count(html, final),
         "has_title": int(bool(audit.TITLE_RE.search(html))),
         "title_text": "",
-        "has_meta_desc": int(bool(audit.METADESC_RE.search(html))),
-        "has_tel": int(bool(audit.TEL_RE.search(html))),
+        "has_meta_desc": int(bool(audit.METADESC_RE.search(html) or audit.OGDESC_RE.search(html))),
+        "has_tel": int(bool(audit.TEL_RE.search(html) or audit.TELNUM_RE.search(html))),
         "has_form": int(bool(audit.FORM_RE.search(html))),
         "has_blog": int(bool(audit.BLOG_RE.search(html))),
         "has_social": int(any(audit.find_socials(html).values())),
@@ -123,6 +126,47 @@ def test_no_viewport_meta_flags():
 def test_no_marketing_sets_do_not_email():
     a = _parse("no_marketing.html", "http://perthphysio.com.au")
     assert a["do_not_email"] == 1
+
+
+# ── Auditor accuracy fixes (the false-positive bug + design detection) ─────────
+def _findings_for(html_extra: str, base="good_modern.html") -> set:
+    """Build findings from a good base page plus some injected HTML."""
+    import json as _json
+    html = _html(base).replace("</body>", html_extra + "</body>")
+    final = "https://x.com/"
+    a = {"http_status": 200, "final_url": final, "https_ok": 1, "redirect_chain": "",
+         "is_wordpress": int("wordpress" in html.lower()),
+         "wp_version": (audit.WP_VER_RE.search(html).group(1) if audit.WP_VER_RE.search(html) else ""),
+         "has_viewport": 1, "footer_year": 2026, "page_weight": len(html), "imgs_no_dims": 0,
+         "internal_links": 6, "has_title": 1, "title_text": "x", "has_meta_desc": 1,
+         "has_tel": 1, "has_form": 1, "has_blog": 0, "has_social": 0, "has_schema": 0,
+         "has_booking": 0, "has_ads_tag": 0, "emails_found": "", "do_not_email": 0,
+         "psi_perf": None, "lcp": None, "cls": None, "tbt": None,
+         "_has_og": bool(audit.OG_RE.search(html)), "_has_favicon": bool(audit.FAVICON_RE.search(html)),
+         "_has_h1": bool(audit.H1_RE.search(html)), "_styles": len(audit.STYLESHEET_RE.findall(html)),
+         "_dated_markup": bool(audit.DATED_MARKUP_RE.search(html))}
+    return {f["type"] for f in audit.build_findings(a, CFG)}
+
+
+def test_plugin_ver_not_misread_as_wordpress_core():
+    # The exact bug: an asset ?ver=7.1.3 must NOT become "WordPress 7.1.3 outdated".
+    types = _findings_for('<link href="/style.css?ver=7.1.3"><script src="x.js?ver=7.0.4"></script>')
+    assert "outdated_wp" not in types
+
+
+def test_modern_wordpress_not_flagged_outdated():
+    types = _findings_for('<meta name="generator" content="WordPress 6.5.2">')
+    assert "outdated_wp" not in types          # 6.x is current — not a problem
+
+
+def test_old_wordpress_core_still_flagged():
+    types = _findings_for('<meta name="generator" content="WordPress 4.9.8">')
+    assert "outdated_wp" in types              # major < 6 — genuinely old
+
+
+def test_design_dated_markup_detected():
+    types = _findings_for('<table width="800"><font color="red">old</font></table>')
+    assert "dated_design" in types
 
 
 # ── Scoring + gates ────────────────────────────────────────────────────────────

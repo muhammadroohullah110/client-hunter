@@ -56,6 +56,42 @@ def load_config() -> dict:
     return _CONFIG_CACHE
 
 
+def _coerce(v):
+    if isinstance(v, (bool, list, int, float)) or v is None:
+        return v
+    s = str(v).strip()
+    if s.lower() in ("true", "false"):
+        return s.lower() == "true"
+    for cast in (int, float):
+        try:
+            return cast(s)
+        except ValueError:
+            pass
+    return s
+
+
+def save_config(updates: dict) -> dict:
+    """Apply dotted-key updates (e.g. 'offer.price_aud') to config.yaml, write it
+    back (order preserved), refresh the cache, and return the new config."""
+    import copy
+    global _CONFIG_CACHE
+    new = copy.deepcopy(load_config())
+    for dotted, val in updates.items():
+        parts = str(dotted).split(".")
+        d = new
+        for pk in parts[:-1]:
+            d = d.setdefault(pk, {})
+            if not isinstance(d, dict):
+                break
+        else:
+            d[parts[-1]] = [str(x) for x in val] if isinstance(val, list) else _coerce(val)
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        f.write("# TDSOCH configuration — editable here or via the Settings page in the web app.\n\n")
+        yaml.safe_dump(new, f, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    _CONFIG_CACHE = new
+    return new
+
+
 def load_env() -> None:
     """Load KEY=VALUE lines from .env into os.environ (existing vars win)."""
     try:

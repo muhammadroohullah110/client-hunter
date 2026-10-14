@@ -39,13 +39,26 @@ TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 VIEWPORT_RE = re.compile(r'<meta[^>]+name=["\']viewport["\']', re.I)
 METADESC_RE = re.compile(r'<meta[^>]+name=["\']description["\'][^>]*content=["\']([^"\']+)', re.I)
 GENERATOR_RE = re.compile(r'<meta[^>]+name=["\']generator["\'][^>]*content=["\']([^"\']+)', re.I)
-WPVER_RE = re.compile(r"(?:wp-embed\.min\.js|ver=)(\d+\.\d+(?:\.\d+)?)", re.I)
-TEL_RE = re.compile(r'href=["\']tel:', re.I)
-FORM_RE = re.compile(r"<form[\s>]", re.I)
+# WordPress CORE version ONLY — from the generator string ("WordPress 5.8.1").
+# NEVER from `?ver=` on assets: that's a plugin/theme version (e.g. ver=7.1.3),
+# which is NOT a WP core version and caused false "outdated" flags.
+WP_VER_RE = re.compile(r"wordpress[\s/]+v?([0-9]+(?:\.[0-9]+){0,2})", re.I)
+TEL_RE = re.compile(r'href=["\'](?:tel|callto):', re.I)
+TELNUM_RE = re.compile(r"\b(?:0[2-8]|13|1300|1800)(?:[\s)(.-]?\d){6,9}\b")  # visible AU number
+FORM_RE = re.compile(r"<form[\s>]|wpforms|gravity[-_]?form|fluentform|typeform\.com|"
+                     r"jotform|hsforms|wpcf7|contact-form-7|calendly\.com|<iframe[^>]+form", re.I)
 IMG_RE = re.compile(r"<img\b[^>]*>", re.I)
-IMG_DIMS_RE = re.compile(r"\b(width|height)\s*=", re.I)
+IMG_DIMS_RE = re.compile(r"\b(?:width|height)\s*=|aspect-ratio|loading\s*=\s*[\"']?lazy", re.I)
 SCHEMA_RE = re.compile(r'application/ld\+json|itemscope|itemtype=', re.I)
 YEAR_RE = re.compile(r"(?:©|&copy;|copyright)[^0-9]{0,20}(20\d{2})", re.I)
+# ── Design-issue signals (what a visitor actually sees) ───────────────────────
+OGDESC_RE = re.compile(r'property=["\']og:description["\']', re.I)
+OG_RE = re.compile(r'property=["\']og:(?:title|image)["\']', re.I)
+FAVICON_RE = re.compile(r'rel=["\'][^"\']*icon[^"\']*["\']', re.I)
+H1_RE = re.compile(r"<h1[\s>]", re.I)
+STYLESHEET_RE = re.compile(r"<link[^>]+stylesheet|<style[\s>]", re.I)
+DATED_MARKUP_RE = re.compile(r"<(?:font|center|marquee|frameset|blink)\b|\bbgcolor=|"
+                             r"<table[^>]+\bwidth=[\"']?\d", re.I)
 
 SOCIAL_RE = {
     "instagram": re.compile(r"https?://(?:www\.)?instagram\.com/([A-Za-z0-9_.]+)", re.I),
@@ -208,14 +221,34 @@ def build_findings(a: dict, cfg: dict) -> list[dict]:
         add("no_meta_description", "medium", "No meta description — weaker Google snippet")
     if a["footer_year"] and a["footer_year"] <= this_year - stale_years:
         add("stale_copyright", "medium", f"Footer copyright says {a['footer_year']} (looks neglected)")
+    # outdated_wp ONLY when the CORE version is genuinely old (major < 6, i.e.
+    # pre-2022). A modern WP 6.x site is NOT flagged — this was the false-positive bug.
     if a["is_wordpress"] and a["wp_version"]:
-        add("outdated_wp", "medium", f"WordPress version {a['wp_version']} exposed (update/security risk)")
-    if a["imgs_no_dims"] and a["imgs_no_dims"] >= 5:
-        add("images_no_dims", "low", f"{a['imgs_no_dims']} images without width/height (layout shift)")
+        try:
+            major = int(a["wp_version"].split(".")[0])
+        except ValueError:
+            major = 99
+        if major < 6:
+            add("outdated_wp", "medium",
+                f"WordPress {a['wp_version']} is several years old (security + speed risk)")
+    if a["imgs_no_dims"] and a["imgs_no_dims"] >= 8:
+        add("images_no_dims", "low", f"{a['imgs_no_dims']} images without dimensions (can cause layout shift)")
     if not a["has_tel"]:
-        add("no_tel_link", "low", "No click-to-call tel: link on homepage")
+        add("no_tel_link", "low", "No click-to-call link or visible number on the homepage")
     if not a["has_form"]:
-        add("no_contact_form", "low", "No contact form found on homepage")
+        add("no_contact_form", "low", "No contact/booking form detected on the homepage")
+
+    # ── Design issues (what a visitor actually sees) ──────────────────────────
+    if a.get("_dated_markup"):
+        add("dated_design", "high", "Dated page code (table layouts / old tags) — looks out-of-date to visitors")
+    if a.get("_styles", 1) == 0:
+        add("unstyled", "high", "Almost no styling detected — the page looks unformatted")
+    if not a.get("_has_og", True):
+        add("no_social_preview", "medium", "No social-preview tags — the link looks broken when shared on WhatsApp/Facebook")
+    if not a.get("_has_h1", True):
+        add("no_h1", "low", "No main heading (H1) — weaker for Google and for scanning the page")
+    if not a.get("_has_favicon", True):
+        add("no_favicon", "low", "No favicon — the little browser-tab icon is missing")
     return f
 
 
@@ -232,8 +265,10 @@ def audit_one(fetcher: PoliteFetcher, lead: dict, cfg: dict, do_screenshot: bool
     title_m = TITLE_RE.search(html or "")
     title = re.sub(r"\s+", " ", title_m.group(1)).strip()[:200] if title_m else ""
     gen = GENERATOR_RE.search(html or "")
-    is_wp = bool(gen and "wordpress" in gen.group(1).lower()) or "wp-content" in (html or "") or "wp-json" in (html or "")
-    wpver_m = WPVER_RE.search(html or "") if is_wp else None
+    gen_content = gen.group(1) if gen else ""
+    is_wp = ("wordpress" in gen_content.lower()) or "wp-content" in (html or "") or "wp-json" in (html or "")
+    # Core version only from the generator string — never from asset ?ver=.
+    wpver_m = WP_VER_RE.search(gen_content) if gen_content else None
     year_m = YEAR_RE.search(html or "")
     imgs = IMG_RE.findall(html or "")
     imgs_no_dims = sum(1 for tag in imgs if not IMG_DIMS_RE.search(tag))
@@ -276,10 +311,16 @@ def audit_one(fetcher: PoliteFetcher, lead: dict, cfg: dict, do_screenshot: bool
         "internal_links": internal_link_count(html or "", final_url or url),
         "has_title": int(bool(title)),
         "title_text": title,
-        "has_meta_desc": int(bool(METADESC_RE.search(html or ""))),
-        "has_tel": int(bool(TEL_RE.search(html or ""))),
+        "has_meta_desc": int(bool(METADESC_RE.search(html or "") or OGDESC_RE.search(html or ""))),
+        "has_tel": int(bool(TEL_RE.search(html or "") or TELNUM_RE.search(html or ""))),
         "has_form": int(bool(FORM_RE.search(html or ""))),
         "has_blog": int(bool(BLOG_RE.search(html or ""))),
+        # transient design signals (used by build_findings; not persisted as columns)
+        "_has_og": bool(OG_RE.search(html or "")),
+        "_has_favicon": bool(FAVICON_RE.search(html or "")),
+        "_has_h1": bool(H1_RE.search(html or "")),
+        "_styles": len(STYLESHEET_RE.findall(html or "")),
+        "_dated_markup": bool(DATED_MARKUP_RE.search(html or "")),
         "has_social": int(any(socials.values())),
         "has_schema": int(bool(SCHEMA_RE.search(html or ""))),
         "has_booking": int(bool(BOOKING_RE.search(html or ""))),
