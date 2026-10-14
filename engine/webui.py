@@ -80,6 +80,36 @@ button:hover{border-color:var(--accent)} button.danger{background:#3b1620} butto
 .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:13px} .kv .k{color:var(--muted)}
 .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap;background:#0e1118;border:1px solid var(--line);border-radius:8px;padding:12px}
 .back{color:var(--muted);font-size:13px}
+/* ── polish ───────────────────────────────────────────────────────────── */
+html{scroll-behavior:smooth} ::selection{background:rgba(45,212,167,.3)}
+*:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.tile{transition:border-color .15s,transform .15s} .tile:hover{border-color:#32445c}
+.card{transition:border-color .15s,box-shadow .15s,transform .15s}
+.card:hover{transform:translateY(-1px)} .brand{letter-spacing:.08em}
+.copybtn{background:transparent;border:1px solid var(--line);color:var(--muted);
+ font-size:11px;padding:3px 9px;border-radius:7px;cursor:pointer;margin-left:8px;vertical-align:middle}
+.copybtn:hover{border-color:var(--accent);color:var(--accent)}
+.row-between{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--accent);
+ color:#04140f;font-weight:700;padding:10px 18px;border-radius:30px;z-index:50;
+ box-shadow:0 8px 24px rgba(0,0,0,.4);animation:pop .2s ease}
+@keyframes pop{from{opacity:0;transform:translate(-50%,8px)}to{opacity:1;transform:translate(-50%,0)}}
+.hint{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;
+ padding:1px 7px;font-size:11px;font-family:ui-monospace,Consolas,monospace;color:var(--muted)}
+/* ── responsive: sidebar → top bar on phones/tablets ─────────────────────── */
+@media (max-width:1100px){.g4{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:860px){
+ .shell{flex-direction:column}
+ .side{position:sticky;top:0;z-index:10;width:auto;height:auto;display:flex;align-items:center;
+   gap:14px;flex-wrap:wrap;padding:12px 16px}
+ .side .brand{font-size:17px} .side .tag,.side .foot{display:none}
+ .nav{display:flex;gap:6px;flex:1} .nav a{margin:0;padding:8px 12px;font-size:13px}
+ .main{padding:18px 16px 80px}
+ .g4,.g3,.g2{grid-template-columns:1fr} .cols{flex-direction:column}
+ .chead{flex-wrap:wrap} .call{margin-left:0;text-align:left;width:100%}
+ .kv{grid-template-columns:120px 1fr}
+}
+@media (max-width:520px){.actions button{flex:1 1 44%}}
 """
 
 SHARED_JS = """
@@ -106,6 +136,17 @@ document.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA/.test(e.target.tagNam
   if(e.key==='j')focusCard(cur+1);else if(e.key==='k')focusCard(cur-1);
   else if('123456'.includes(e.key)){const b=cards()[cur]?.querySelectorAll('button[data-o]')[+e.key-1];b?.click();}});
 if(cards().length)focusCard(0);
+function toast(m){const d=document.createElement('div');d.className='toast';d.textContent=m;
+  document.body.appendChild(d);setTimeout(()=>d.remove(),1400);}
+function copyFrom(id){const el=document.getElementById(id);if(!el)return;
+  const text=(el.innerText||el.textContent||'').trim();
+  const done=()=>toast('Copied ✓');
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(done).catch(()=>fallback(text,done));}
+  else fallback(text,done);}
+function fallback(text,done){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';
+  ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){}
+  ta.remove();}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-copy]');if(b)copyFrom(b.dataset.copy);});
 </script>"""
 
 
@@ -197,7 +238,9 @@ def _card(c: dict, i: int) -> str:
         · <a href="{html.escape(c['website'])}" target="_blank" rel="noopener">{html.escape(c['domain'])}</a></div></div>
     <div class="call">{tel}{mob}{dne}{email}</div></div>
   <div class="cbody">
-    <h3 class="s">Opener</h3><div class="opener">{opener}</div>
+    <div class="row-between"><h3 class="s">Opener</h3>
+      <button class="copybtn" data-copy="op-{c['id']}">copy</button></div>
+    <div class="opener" id="op-{c['id']}">{opener}</div>
     <div class="cols"><div><h3 class="s">Top findings</h3><ul class="f">{findings or '<li>—</li>'}</ul></div>
       <div><h3 class="s">Objections</h3><ul class="f">{obj or '<li>—</li>'}</ul></div></div>
     {last}
@@ -216,8 +259,9 @@ def callsheet_body(cards: list[dict]) -> str:
     rows = "".join(_card(c, i) for i, c in enumerate(cards, 1))
     empty = '<div class="tile">No qualified leads yet. Run <span class="mono">python tdsoch.py run</span>.</div>'
     return (f'<div class="h1">Call Sheet</div>'
-            f'<div class="hsub">{len(cards)} qualified · best first · keys: '
-            f'<b>j/k</b> move · <b>1–6</b> log</div>{rows or empty}')
+            f'<div class="hsub">{len(cards)} qualified · best first &nbsp; '
+            f'<span class="hint">j</span><span class="hint">k</span> move &nbsp; '
+            f'<span class="hint">1</span>–<span class="hint">6</span> log outcome</div>{rows or empty}')
 
 
 # ── Leads table ──────────────────────────────────────────────────────────────────
@@ -268,13 +312,19 @@ def lead_detail_body(conn, lead_id: int) -> str:
     draft_html = ""
     if dr and dr["opener"]:
         dm_txt = dr["dm"] if ("dm" in dr.keys() and dr["dm"]) else ""
-        dm_block = (f'<h3 class="s">Cold DM (IG / FB / LinkedIn)</h3><div class="mono">{html.escape(dm_txt)}</div>'
-                    if dm_txt else "")
-        draft_html = (f'<div class="tile"><h3 class="s">Call opener</h3><div class="opener">{html.escape(dr["opener"])}</div>'
-                      f'<h3 class="s">Email draft</h3><div class="mono">{html.escape((dr["email_subject"] or "")+chr(10)+chr(10)+(dr["email_body"] or ""))}</div>'
-                      + dm_block
-                      + (f'<div style="margin-top:10px"><a href="/audit/{html.escape(lead["root_domain"])}" target="_blank">open one-page audit →</a></div>' if dr["pdf_path"] else "")
-                      + '</div>')
+        email_txt = (dr["email_subject"] or "") + chr(10) + chr(10) + (dr["email_body"] or "")
+        def hdr(title, cid):
+            return (f'<div class="row-between"><h3 class="s">{title}</h3>'
+                    f'<button class="copybtn" data-copy="{cid}">copy</button></div>')
+        dm_block = (hdr("Cold DM (IG / FB / LinkedIn)", "d-dm")
+                    + f'<div class="mono" id="d-dm">{html.escape(dm_txt)}</div>') if dm_txt else ""
+        draft_html = (
+            '<div class="tile">'
+            + hdr("Call opener", "d-op") + f'<div class="opener" id="d-op">{html.escape(dr["opener"])}</div>'
+            + hdr("Email draft", "d-em") + f'<div class="mono" id="d-em">{html.escape(email_txt)}</div>'
+            + dm_block
+            + (f'<div style="margin-top:10px"><a href="/audit/{html.escape(lead["root_domain"])}" target="_blank">open one-page audit →</a></div>' if dr["pdf_path"] else "")
+            + '</div>')
     else:
         draft_html = (f'<div class="tile">No draft yet. '
                       f'<button onclick="writeDraft({lead_id})" class="go">Write opener + email</button></div>')

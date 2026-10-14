@@ -131,15 +131,21 @@ playwright install chromium
   makes the PageSpeed gates work; a free [ABN_GUID](https://abr.business.gov.au/Tools/WebServices)
   verifies businesses are active.
 
-### 4. Test it
+### 4. Run it — the 3 steps
 ```bash
 python tdsoch.py run --city Brisbane --niche dentist --limit 20 --no-screenshot
 python tdsoch.py write
 python tdsoch.py serve
 ```
-First command finds → audits → ranks; `write` drafts the openers/emails; `serve`
-opens the web app at http://localhost:8700. Run the tests with
-`python tests/test_engine.py`.
+1. **`run`** — finds → audits → ranks the leads (the nightly brain).
+2. **`write`** — drafts the openers / emails / DMs / audits for the queue.
+3. **`serve`** — opens the web app at **http://localhost:8700** in your browser.
+
+**Prefer one click?** Just **double-click `start.bat`** — it launches the web app
+and opens your browser. Keep the little black window open while you use it; close
+it to stop. (Run `run` + `write` at least once first so there are leads to show.)
+
+Run the tests any time: `python tests/test_engine.py`.
 
 ### 5. Automate the nightly run (while you sleep)
 Easiest — from PowerShell in this folder:
