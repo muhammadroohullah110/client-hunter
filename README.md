@@ -48,9 +48,10 @@ Claude's expensive intelligence is saved for the one thing scripts can't do well
         stored in SQLite (data/leads.db)
 ```
 
-**Build status:** Step 1 (`find` + `audit` + `score`) is complete and tested.
-Steps 2–7 (callsheet, write, follow-up drafts, dashboard, scheduling polish,
-delivery playbook) are next.
+**Build status:** Steps 1–2 complete and tested. Step 1 (`find` + `audit` +
+`score`) is the nightly brain; Step 2 (`callsheet`) is your 7 AM screen. Steps
+3–7 (write, follow-up drafts, dashboard, scheduling polish, delivery playbook)
+are next.
 
 ---
 
@@ -61,6 +62,7 @@ delivery playbook) are next.
 | [`engine/find.py`](engine/find.py) | Discover businesses from **OpenStreetMap Overpass** (free, no key) by city × niche, keep only those with a website, de-dupe, drop chains/suppressed, optional free **ABN** check | No |
 | [`engine/audit.py`](engine/audit.py) | Fetch each site politely (robots.txt, 1 req/s, contact-email UA); record HTTPS / viewport / WordPress+version / title / meta / tel / form / page weight / image dims / internal-link count; detect **booking widgets** & **ad pixels** (budget signals); harvest **published** emails + socials; optional **PageSpeed**; optional screenshot; derive severity-tagged findings | No |
 | [`engine/score.py`](engine/score.py) | **Hard gates** (reachable · not a chain · has a fixable problem · can pay) → qualified; then a **0–100 rank** across 6 weighted dimensions so biggest-pain + best-payer surface first | No |
+| [`engine/callsheet.py`](engine/callsheet.py) | Your **7 AM screen**: a local web page (stdlib server, no Flask) with one card per qualified lead — local time, click-to-call, opener, top findings, objection hints, and one-click outcome buttons (keys 1–6) that log straight to SQLite; `NOT_INTERESTED` auto-adds to `suppression.csv` | No |
 | [`engine/common.py`](engine/common.py) | Config/env, logging, the polite fetcher, free Nominatim geocoding, grid tiling, AU phone/domain helpers | No |
 | [`engine/db.py`](engine/db.py) | SQLite schema + helpers (the data contract every module shares) | No |
 
@@ -150,7 +152,9 @@ python run_step1.py --limit 20 --no-screenshot   # quick test run
 python -m engine.find   --dry-run           # find only, print, write nothing
 python -m engine.audit  --limit 10 --psi    # audit 10, with PageSpeed on
 python -m engine.score  --show 25           # re-score, print top 25 queue
-python tests/test_engine.py                 # 11 tests, offline
+python -m engine.callsheet                  # open your 7 AM call sheet (localhost:8700)
+python -m engine.callsheet --static         # dump a read-only out/callsheet.html
+python tests/test_engine.py                 # 14 tests, offline
 ```
 
 Every module supports `--dry-run`. Nothing is ever emailed or called

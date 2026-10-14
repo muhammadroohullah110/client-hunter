@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engine import audit, score  # noqa: E402
+from engine import audit, callsheet, score  # noqa: E402
 from engine.common import normalize_au_phone, root_domain  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures"
@@ -152,6 +152,47 @@ def test_chain_domain_gated_out():
     r = score.score_lead(lead, a, CFG, excluded={"pacificsmiles.com.au"})
     assert r["gates"]["not_chain"]["pass"] is False
     assert r["qualified"] is False
+
+
+# ── Call sheet (pure render, no DB) ───────────────────────────────────────────
+def _fake_card():
+    return {
+        "id": 1, "name": "Warner Lakes Dental", "domain": "warnerlakesdental.com.au",
+        "website": "https://warnerlakesdental.com.au", "phone": "0734480162",
+        "phone_type": "landline", "email": "info@warnerlakesdental.com.au",
+        "city": "Brisbane", "local_time": "Wed 03:00 PM", "niche": "dentist",
+        "score": 58, "tier": "warm", "opener": "",
+        "findings": [{"type": "outdated_wp", "severity": "medium", "detail": "WordPress 3.7.1 exposed"}],
+        "objections": [("We already have someone", "I only fix what's measurably slow.")],
+        "last_outcome": "", "do_not_email": False,
+    }
+
+
+def test_callsheet_renders_card_and_tellink():
+    html = callsheet.render_html([_fake_card()], {"business_name": "Acme", "my_name": "Me",
+                                                   "offer": {"price_aud": 249}}, live=True)
+    assert 'href="tel:0734480162"' in html
+    assert "Warner Lakes Dental" in html
+    assert "58/100" in html
+    assert "WordPress 3.7.1 exposed" in html
+    assert "const LIVE = true" in html
+
+
+def test_callsheet_mobile_flagged_and_price_substituted():
+    c = _fake_card()
+    c["phone_type"] = "mobile"
+    c["objections"] = [("How much", "Fixed $[price] one-off.")]
+    # price substitution happens in build_cards; emulate it here
+    c["objections"] = [(o, a.replace("$[price]", "$249")) for o, a in c["objections"]]
+    html = callsheet.render_html([c], {"offer": {"price_aud": 249}}, live=False)
+    assert "CHECK_DNCR" in html          # mobile warning shown
+    assert "$249" in html
+    assert "const LIVE = false" in html  # read-only export disables logging
+
+
+def test_callsheet_objection_bank_has_all_niches():
+    for niche in ("dentist", "physiotherapist", "accountant", "plumber", "electrician"):
+        assert niche in callsheet.NICHE_OBJECTIONS and callsheet.NICHE_OBJECTIONS[niche]
 
 
 if __name__ == "__main__":
