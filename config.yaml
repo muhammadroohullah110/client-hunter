@@ -1,0 +1,78 @@
+# ───────────────────────────────────────────────────────────────────────────
+# CHunter — business settings.  Fill the [BRACKETS] with your real values.
+# Everything below is read by the engine; no code changes needed.
+# ───────────────────────────────────────────────────────────────────────────
+
+business_name: "[YOUR BUSINESS NAME]"
+my_name:       "[YOUR NAME]"
+my_email:      "[YOUR EMAIL]"          # used in the User-Agent so sites can contact you
+my_phone:      "[YOUR AU VIRTUAL / VoIP NUMBER]"
+payment_link:  "[PAYONEER / WISE REQUEST LINK]"
+
+country: AU
+
+# Start with 1–2 while you test. Add more once step 1 looks good.
+cities:
+  - Brisbane
+  # - Gold Coast
+  # - Perth
+  # - Adelaide
+
+# Niches to hunt.  Each maps to free OpenStreetMap tags in engine/find.py.
+niches:
+  - dentist
+  # - physiotherapist
+  # - accountant
+  # - plumber
+  # - electrician
+
+offer:
+  name: "Website Speed & Google Fix"
+  price_aud: 249
+  delivery_hours: 48
+  upsell_monthly_aud: 149
+
+# ── Intelligence dials (how 2000 raw → ~20 qualified) ──────────────────────
+daily_new_leads_target: 60     # how many to find + audit per night
+daily_claude_leads_cap: 25     # max leads handed to Claude for writing
+
+qualify:
+  # A lead is QUALIFIED only if it clears every hard gate below.
+  gates:
+    require_reachable: true          # site responds (200–399)
+    require_not_chain: true          # not in exclude_domains.txt
+    require_fixable_problem: true    # at least one visible, sellable problem
+    require_ability_to_pay: true     # phone + (enough pages / booking / ads / clinic-trade niche)
+  min_pages_for_pay_signal: 5
+  # Problems that count as "visible + fixable" (any one trips the gate):
+  fixable_problems:
+    - low_psi            # PageSpeed mobile < psi_fail_threshold
+    - slow_lcp           # LCP > lcp_fail_seconds
+    - no_https
+    - no_viewport
+    - stale_copyright    # footer year <= current year - copyright_stale_years
+    - outdated_wp
+  psi_fail_threshold: 50
+  lcp_fail_seconds: 4.0
+  copyright_stale_years: 2
+
+# Niche → ability-to-pay tier (higher = more budget / lifetime value).
+# Drives ranking so dentists/physios surface above one-van tradies.
+niche_tiers:
+  dentist: 3
+  physiotherapist: 3
+  accountant: 3
+  electrician: 2
+  plumber: 2
+
+# Politeness / legal hygiene
+crawl:
+  requests_per_second_per_domain: 1
+  timeout_seconds: 15
+  obey_robots_txt: true
+  max_pages_per_site: 3            # homepage + /contact + /contact-us only
+  # PageSpeed Insights is OFF by default: it's slow and its anonymous quota is
+  # throttled, so it returns blanks without a key. Add a free PSI_KEY to .env,
+  # then set this true (or run `python -m engine.audit --psi`) to unlock the
+  # low_psi / slow_lcp problem gates. The engine qualifies well without it.
+  pagespeed: false

@@ -1,0 +1,6 @@
+# CHunter — all free, no paid APIs.
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+PyYAML>=6.0.1
+playwright>=1.44.0      # optional: mobile screenshots. Run `playwright install chromium` after pip.
+# Scoring/audit use only the Python stdlib + the above. No LLM libraries by design.

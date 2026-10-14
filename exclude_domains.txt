@@ -1,0 +1,23 @@
+# Root domains to skip — national chains / franchises / aggregators (no local decision-maker).
+# One root domain per line. Add as you spot them in the call sheet.
+# Dental / health chains:
+pacificsmiles.com.au
+1300smiles.com.au
+dentalone.com.au
+maven.dental
+nationaldentalcare.com.au
+bupa.com.au
+# Trades franchises:
+hiredup.com.au
+jimsplumbing.net.au
+jimsgroup.com.au
+laserplumbing.com.au
+# Directories / aggregators (not a business site):
+healthengine.com.au
+hotdoc.com.au
+oneflare.com.au
+hipages.com.au
+yellowpages.com.au
+truelocal.com.au
+localsearch.com.au
+cylex.com.au
