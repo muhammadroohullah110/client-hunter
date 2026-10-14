@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from engine import audit, callsheet, score  # noqa: E402
+from engine import audit, callsheet, outreach, score  # noqa: E402
 from engine.common import normalize_au_phone, root_domain  # noqa: E402
 
 FIX = ROOT / "tests" / "fixtures"
@@ -193,6 +193,40 @@ def test_callsheet_mobile_flagged_and_price_substituted():
 def test_callsheet_objection_bank_has_all_niches():
     for niche in ("dentist", "physiotherapist", "accountant", "plumber", "electrician"):
         assert niche in callsheet.NICHE_OBJECTIONS and callsheet.NICHE_OBJECTIONS[niche]
+
+
+# ── Outreach frameworks (trained from the notes) ──────────────────────────────
+def test_subject_is_curiosity_and_facts_only():
+    subj, opening = outreach.pick_subject("outdated_wp", "Warner Lakes Dental")
+    assert "Warner Lakes Dental" in subj
+    assert subj == "Warner Lakes Dental — this is being left on the table"
+    assert "old software" in opening.lower()
+    # a finding type we don't have a pattern for falls back cleanly
+    assert outreach.pick_subject("something_new", "Acme")[0].startswith("The good news")
+
+
+def test_dm_trojan_horse_then_risk_reversal():
+    dm = outreach.build_dm("Sam", "Bulimba Dental", "low_psi")
+    assert dm["trojan_horse"].startswith("Hey Sam")
+    assert "Bulimba Dental" in dm["pitch"]
+    assert "don't pay" in dm["pitch"]            # risk reversal present
+    assert "slow speed" in dm["pitch"]           # maps the real finding
+    # guarantee can be turned off
+    assert "don't pay" not in outreach.build_dm("Sam", "X", "low_psi", offer_guarantee=False)["pitch"]
+
+
+def test_universal_objections_substitute_price_and_hours():
+    objs = outreach.universal_objections(249, 48)
+    joined = " ".join(a for _, a in objs)
+    assert "$249" in joined and "48 hours" in joined
+    assert "{price}" not in joined and "{hours}" not in joined
+    assert any("agency" in o.lower() for o, _ in objs)   # the big one is covered
+
+
+def test_call_stages_cover_the_arc():
+    titles = " ".join(t for t, _ in outreach.CALL_STAGES).lower()
+    for beat in ("tension", "credibility", "problem", "offer", "close"):
+        assert beat in titles
 
 
 if __name__ == "__main__":

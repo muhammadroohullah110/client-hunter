@@ -127,6 +127,14 @@ def connect() -> sqlite3.Connection:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(SCHEMA)
+        _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Additive, idempotent schema upgrades (safe to run every start)."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(drafts)")}
+    if "dm" not in cols:
+        conn.execute("ALTER TABLE drafts ADD COLUMN dm TEXT")  # cold DM draft (IG/FB/LinkedIn)
 
 
 # ── leads ─────────────────────────────────────────────────────────────────────

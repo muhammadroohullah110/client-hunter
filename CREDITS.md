@@ -27,6 +27,15 @@ CHunter stands on the shoulders of several open-source projects. We reused
 - **What we did NOT use:** its implementation (n8n + Serper.dev + GPT-4o +
   Perplexity ≈ $0.92–1.55 per 100 leads). All paid APIs — excluded by design.
 
+### Outreach training notes (techniques adapted, not reproduced)
+The outreach brain ([`engine/outreach.py`](engine/outreach.py) +
+[`docs/outreach-playbook.md`](docs/outreach-playbook.md)) distils **methods** from
+a set of sales/outreach training notes — cold-email subject patterns and the
+PITCH→OFFER→PROOF→CTA structure, the cold-DM "trojan-horse → risk-reversal"
+flow, a live sales-call stage breakdown, and voice-agent qualify/objection flows.
+Only the **techniques** were reused and reworked for AU local-business web
+services; no third-party text, branding, or lead data was copied.
+
 ### Tools
 - **OpenStreetMap / Overpass API** — free lead source. © OpenStreetMap
   contributors, ODbL.

@@ -92,8 +92,11 @@ def build_cards(conn, cfg: dict, limit: int) -> list[dict]:
         findings = json.loads(audit["findings_json"]) if audit and audit["findings_json"] else []
         findings.sort(key=lambda f: {"high": 0, "medium": 1, "low": 2}.get(f["severity"], 3))
         draft = conn.execute("SELECT * FROM drafts WHERE lead_id=?", (r["id"],)).fetchone()
-        objections = NICHE_OBJECTIONS.get(r["niche"], [])
-        objections = [(o, a.replace("$[price]", f"${price}")) for o, a in objections]
+        from . import outreach  # local import avoids any import-order surprises
+        hours = cfg.get("offer", {}).get("delivery_hours", 48)
+        objections = [(o, a.replace("$[price]", f"${price}")) for o, a in NICHE_OBJECTIONS.get(r["niche"], [])]
+        objections += outreach.universal_objections(price, hours)
+        objections = objections[:5]  # keep the card scannable
         last = conn.execute(
             "SELECT status, note, created_at FROM outcomes WHERE lead_id=? ORDER BY id DESC LIMIT 1",
             (r["id"],)).fetchone()

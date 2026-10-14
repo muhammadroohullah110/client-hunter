@@ -267,8 +267,12 @@ def lead_detail_body(conn, lead_id: int) -> str:
                     f'<span style="color:var(--muted)">{o["created_at"][:16]}</span></div>' for o in outcomes) or '<div style="color:var(--muted)">no calls logged</div>'
     draft_html = ""
     if dr and dr["opener"]:
-        draft_html = (f'<div class="tile"><h3 class="s">Opener</h3><div class="opener">{html.escape(dr["opener"])}</div>'
+        dm_txt = dr["dm"] if ("dm" in dr.keys() and dr["dm"]) else ""
+        dm_block = (f'<h3 class="s">Cold DM (IG / FB / LinkedIn)</h3><div class="mono">{html.escape(dm_txt)}</div>'
+                    if dm_txt else "")
+        draft_html = (f'<div class="tile"><h3 class="s">Call opener</h3><div class="opener">{html.escape(dr["opener"])}</div>'
                       f'<h3 class="s">Email draft</h3><div class="mono">{html.escape((dr["email_subject"] or "")+chr(10)+chr(10)+(dr["email_body"] or ""))}</div>'
+                      + dm_block
                       + (f'<div style="margin-top:10px"><a href="/audit/{html.escape(lead["root_domain"])}" target="_blank">open one-page audit →</a></div>' if dr["pdf_path"] else "")
                       + '</div>')
     else:

@@ -26,7 +26,7 @@ import html
 import json
 import sys
 
-from . import db
+from . import db, outreach
 from .callsheet import NICHE_OBJECTIONS
 from .common import OUT_DIR, get_logger, load_config
 
@@ -77,15 +77,21 @@ def _email_draft(lead: dict, audit: dict, findings: list[dict], cfg: dict) -> tu
     pay = cfg.get("payment_link", "")
 
     two = _two_findings(findings)
+    top_type = two[0]["type"] if two else "_default"
     bullets = "\n".join(f"  {i}. {f['detail']}" for i, f in enumerate(two, 1))
-    subject = f"Quick note about {biz}'s website"
+
+    # Subject + opening: curiosity / pattern-interrupt (Cold Emails Framework).
+    subject, opening = outreach.pick_subject(top_type, biz)
+    # Body follows PITCH→OFFER, VALUE→TRUST, PROOF, ASK 15 MINS→CTA.
     body = (
         f"Hi there,\n\n"
-        f"I'm {me} from {business}. I had a quick look at {biz}'s website and "
-        f"spotted a couple of things worth fixing:\n\n"
+        f"{opening}\n\n"
+        f"I'm {me} from {business}. Two things I'd fix on {biz}'s site:\n\n"
         f"{bullets}\n\n"
-        f"I fix both for a fixed ${price} (done in {hours} hours, no lock-in). "
-        f"Happy to send a free one-page audit first so you can see exactly what I mean.\n\n"
+        f"I do this for a fixed ${price} — done in {hours} hours, no lock-in, and you "
+        f"approve everything before it goes live. It usually pays for itself the first "
+        f"enquiry it stops you losing.\n\n"
+        f"Can I send you a free one-page audit, or grab 15 minutes this week?\n"
         f"{('Next step / payment: ' + pay) if pay else ''}\n"
         f"{me}\n{business} · {phone} · {email}\n\n"
         f"If you'd rather not hear from me, just reply with \"remove\" and I won't contact you again."
@@ -158,10 +164,16 @@ def write_one(conn, lead_id: int, cfg: dict, out_day, dry_run: bool) -> dict | N
     me = cfg.get("my_name", "")
 
     opener, problem = _pick_opener(findings, audit, me, biz)
-    objections = NICHE_OBJECTIONS.get(lead["niche"], [])
     price = cfg.get("offer", {}).get("price_aud", "")
-    objections = [(o, a.replace("$[price]", f"${price}")) for o, a in objections]
+    hours = cfg.get("offer", {}).get("delivery_hours", 48)
+    # Objections: niche-specific first, then the universal call-tested bank.
+    niche_obj = [(o, a.replace("$[price]", f"${price}")) for o, a in NICHE_OBJECTIONS.get(lead["niche"], [])]
+    objections = niche_obj + outreach.universal_objections(price, hours)
     obj_text = "\n".join(f'"{o}" -> {a}' for o, a in objections)
+
+    # Cold DM draft (trojan-horse question → risk-reversal pitch).
+    dm = outreach.build_dm(name="", biz=biz, finding_type=problem)
+    dm_text = dm["trojan_horse"] + "\n\n(after they reply)\n" + dm["pitch"]
 
     do_not_email = bool(audit["do_not_email"])
     if do_not_email:
@@ -177,11 +189,11 @@ def write_one(conn, lead_id: int, cfg: dict, out_day, dry_run: bool) -> dict | N
             _audit_html(lead, audit, findings, cfg), encoding="utf-8")
         now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
         conn.execute(
-            "INSERT OR REPLACE INTO drafts (lead_id, opener, objections, email_subject, email_body, pdf_path, state, created_at) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (lead_id, opener, obj_text, subject, body, pdf_path, "draft", now))
+            "INSERT OR REPLACE INTO drafts (lead_id, opener, objections, email_subject, email_body, dm, pdf_path, state, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (lead_id, opener, obj_text, subject, body, dm_text, pdf_path, "draft", now))
     return {"lead": biz, "problem": problem, "opener": opener,
-            "email": bool(subject), "pdf": pdf_path}
+            "email": bool(subject), "dm": bool(dm_text), "pdf": pdf_path}
 
 
 def run(limit: int | None = None, lead: int | None = None, dry_run: bool = False) -> int:
