@@ -1,8 +1,13 @@
-# CHunter — Audit → Call → Fix Lead Engine
+# TDSOCH — The Damn System Of Client Hunting
+
+![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![tests](https://github.com/muhammadroohullah110/client-hunter/actions/workflows/tests.yml/badge.svg)
 
 A **zero-cost, intelligence-first** lead engine for a one-person web-services
 business selling to Australian small businesses. Scripts do the grunt work for
-free; an AI writes the handful of personalised messages that actually matter.
+free; the handful of personalised messages that actually matter are written from
+real audit facts — and you run the whole thing from one beautiful local web app.
 
 > **The whole idea:** don't hand yourself 2,000 raw businesses. Hand yourself
 > **~20 pre-qualified ones** that have a real, fixable website problem *and* the
@@ -48,10 +53,10 @@ Claude's expensive intelligence is saved for the one thing scripts can't do well
         stored in SQLite (data/leads.db)
 ```
 
-**Build status:** Steps 1–2 complete and tested. Step 1 (`find` + `audit` +
-`score`) is the nightly brain; Step 2 (`callsheet`) is your 7 AM screen. Steps
-3–7 (write, follow-up drafts, dashboard, scheduling polish, delivery playbook)
-are next.
+**Build status: complete.** All 7 steps built and tested (14/14):
+find → audit → score (nightly brain) · call sheet · write (openers/emails) ·
+follow-up drafts · delivery playbook · dashboard · scheduling — all surfaced
+through one local web app (`python tdsoch.py serve`).
 
 ---
 
@@ -63,6 +68,11 @@ are next.
 | [`engine/audit.py`](engine/audit.py) | Fetch each site politely (robots.txt, 1 req/s, contact-email UA); record HTTPS / viewport / WordPress+version / title / meta / tel / form / page weight / image dims / internal-link count; detect **booking widgets** & **ad pixels** (budget signals); harvest **published** emails + socials; optional **PageSpeed**; optional screenshot; derive severity-tagged findings | No |
 | [`engine/score.py`](engine/score.py) | **Hard gates** (reachable · not a chain · has a fixable problem · can pay) → qualified; then a **0–100 rank** across 6 weighted dimensions so biggest-pain + best-payer surface first | No |
 | [`engine/callsheet.py`](engine/callsheet.py) | Your **7 AM screen**: a local web page (stdlib server, no Flask) with one card per qualified lead — local time, click-to-call, opener, top findings, objection hints, and one-click outcome buttons (keys 1–6) that log straight to SQLite; `NOT_INTERESTED` auto-adds to `suppression.csv` | No |
+| [`engine/write.py`](engine/write.py) | Drafts a **spoken call opener** (≤40 words, built from the lead's biggest real finding), objection scripts, a **Spam-Act-compliant email**, and a one-page HTML audit — facts only, never invented numbers | Template (Claude-polishable) |
+| [`engine/followup.py`](engine/followup.py) | Prepares `.eml` email drafts (audit attached) you review and send yourself — **never auto-sends**; NO_ANSWER requeues after 2 business days (max 3), callbacks surface on their day; optional Gmail-API drafts | No |
+| [`engine/deliver.py`](engine/deliver.py) | For a SOLD lead: an audit-specific **fix playbook** (backup first, then the exact fixes), a **before/after** re-audit, and an upsell-email draft | No |
+| [`engine/dashboard.py`](engine/dashboard.py) | The funnel scoreboard: found→…→sold, conversion vs the §4 targets, 7-day trend, revenue (A$ + ₨), and red flags when a step underperforms | No |
+| [`engine/webapp.py`](engine/webapp.py) + [`webui.py`](engine/webui.py) | **The web app** — one beautiful local UI over everything: Dashboard, Call Sheet, Leads, and per-lead detail, with one-click outcome logging and on-demand opener/email writing | No |
 | [`engine/common.py`](engine/common.py) | Config/env, logging, the polite fetcher, free Nominatim geocoding, grid tiling, AU phone/domain helpers | No |
 | [`engine/db.py`](engine/db.py) | SQLite schema + helpers (the data contract every module shares) | No |
 
@@ -122,20 +132,25 @@ playwright install chromium
 
 ### 4. Test it
 ```bash
-python run_step1.py --city Brisbane --niche dentist --limit 20 --no-screenshot
+python tdsoch.py run --city Brisbane --niche dentist --limit 20 --no-screenshot
+python tdsoch.py write
+python tdsoch.py serve
 ```
-You'll see leads found → audited → a ranked "TODAY QUEUE" of the qualified ones.
-Run the test suite any time with:
-```bash
-python tests/test_engine.py
-```
+First command finds → audits → ranks; `write` drafts the openers/emails; `serve`
+opens the web app at http://localhost:8700. Run the tests with
+`python tests/test_engine.py`.
 
-### 5. Automate it (runs while you sleep)
-Open **Task Scheduler** → *Create Basic Task* → name it "CHunter nightly" →
-trigger **Daily at 2:00 AM** → action **Start a program** → browse to
-`run_all.bat` in this folder → finish. Tick *"Run whether user is logged on or
-not"* and, under *Conditions*, untick *"Start only on AC power"* if you're on a
-laptop. Logs land in `logs/nightly.log`.
+### 5. Automate the nightly run (while you sleep)
+Easiest — from PowerShell in this folder:
+```bash
+.\scripts\install_task.ps1
+```
+That registers a **"TDSOCH Nightly"** task (daily 2 AM, wakes the PC, catches up
+if it was off). Logs land in `logs/nightly.log`. Remove it with
+`Unregister-ScheduledTask -TaskName "TDSOCH Nightly" -Confirm:$false`.
+
+Prefer the cloud (runs even when your PC is off)? Run the nightly on a **private**
+fork via GitHub Actions — never on the public repo, so leads stay private.
 
 > **Laptop tip:** if the machine sleeps mid-run, some fetches fail that night
 > (the engine retries once and recovers next run). For a 100% reliable 2 AM run,
@@ -146,19 +161,28 @@ laptop. Logs land in `logs/nightly.log`.
 
 ## Command cheat-sheet
 
+One entry point, `tdsoch.py`:
+
 ```bash
-python run_step1.py                         # full nightly pipeline (uses config.yaml)
-python run_step1.py --limit 20 --no-screenshot   # quick test run
-python -m engine.find   --dry-run           # find only, print, write nothing
-python -m engine.audit  --limit 10 --psi    # audit 10, with PageSpeed on
-python -m engine.score  --show 25           # re-score, print top 25 queue
-python -m engine.callsheet                  # open your 7 AM call sheet (localhost:8700)
-python -m engine.callsheet --static         # dump a read-only out/callsheet.html
-python tests/test_engine.py                 # 14 tests, offline
+python tdsoch.py run            # nightly brain: find -> audit -> score (free, no LLM)
+python tdsoch.py write          # draft openers + emails + audits for the queue
+python tdsoch.py serve          # open the web app (Dashboard / Call Sheet / Leads)
+python tdsoch.py morning        # write + serve — your 7 AM one-liner
+python tdsoch.py followup       # prepare .eml drafts + requeue (never auto-sends)
+python tdsoch.py dashboard      # funnel metrics + out/dashboard.html
+python tdsoch.py deliver --lead 12            # fix playbook for a SOLD lead
+python tdsoch.py deliver --lead 12 --reaudit  # before/after report
 ```
 
-Every module supports `--dry-run`. Nothing is ever emailed or called
-automatically — the engine only *prepares*.
+Flags pass straight through, e.g.
+`python tdsoch.py run --city Brisbane --niche dentist --limit 20 --no-screenshot`.
+
+Modules still run directly too (`python -m engine.find --dry-run`,
+`python -m engine.audit --limit 10 --psi`, …). Every module supports
+`--dry-run`. **Nothing is ever emailed or called automatically — the system only
+prepares. You call, you click, you send.**
+
+Run the tests any time: `python tests/test_engine.py` (14 tests, offline).
 
 ---
 

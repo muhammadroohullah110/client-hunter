@@ -36,6 +36,9 @@ offer:
 daily_new_leads_target: 60     # how many to find + audit per night
 daily_claude_leads_cap: 25     # max leads handed to Claude for writing
 
+dashboard:
+  aud_to_pkr: 185              # manual A$→₨ rate for the revenue tile (update as needed)
+
 qualify:
   # A lead is QUALIFIED only if it clears every hard gate below.
   gates:

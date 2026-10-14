@@ -1,0 +1,147 @@
+"""
+webapp.py — TDSOCH's single local web app. One beautiful UI over the whole
+pipeline: Dashboard, Call Sheet, Leads, and per-lead detail — with one-click
+outcome logging and on-demand opener/email writing. Stdlib server, no Flask.
+
+    python -m engine.webapp              # http://localhost:8700
+    python -m engine.webapp --port 9000
+
+Nothing is auto-dialled or auto-sent. You call, you click, you send.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import sys
+import urllib.parse
+import webbrowser
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+from . import db, webui, write
+from .callsheet import build_cards, record_outcome
+from .common import AUDIT_DIR, OUT_DIR, get_logger, load_config
+from .dashboard import metrics
+
+log = get_logger("web")
+
+
+class Handler(BaseHTTPRequestHandler):
+    cfg: dict = {}
+    limit: int = 25
+
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body, ctype="text/html; charset=utf-8"):
+        data = body.encode("utf-8") if isinstance(body, str) else body
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self):
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        qs = urllib.parse.parse_qs(parsed.query)
+        try:
+            if path == "/":
+                return self._send(200, webui.page("Dashboard", webui.dashboard_body(metrics(), self.cfg),
+                                                  self.cfg, active="dashboard"))
+            if path == "/callsheet":
+                with db.connect() as conn:
+                    cards = build_cards(conn, self.cfg, self.limit)
+                return self._send(200, webui.page("Call Sheet", webui.callsheet_body(cards),
+                                                  self.cfg, active="callsheet"))
+            if path == "/leads":
+                flt = (qs.get("f", ["qualified"])[0])
+                with db.connect() as conn:
+                    body = webui.leads_body(conn, flt)
+                return self._send(200, webui.page("Leads", body, self.cfg, active="leads"))
+            if path.startswith("/lead/"):
+                lead_id = int(path.rsplit("/", 1)[1])
+                with db.connect() as conn:
+                    body = webui.lead_detail_body(conn, lead_id)
+                return self._send(200, webui.page("Lead", body, self.cfg, active="leads"))
+            if path.startswith("/audit/"):
+                return self._serve_audit(path.rsplit("/", 1)[1])
+            if path.startswith("/shot/"):
+                return self._serve_file(AUDIT_DIR / urllib.parse.unquote(path[len("/shot/"):]), "image/png")
+            return self._send(404, "not found", "text/plain")
+        except Exception as e:
+            log.error("GET %s failed: %s", path, e)
+            return self._send(500, f"error: {e}", "text/plain")
+
+    def _serve_audit(self, domain: str):
+        with db.connect() as conn:
+            row = conn.execute("SELECT pdf_path FROM drafts d JOIN leads l ON l.id=d.lead_id "
+                               "WHERE l.root_domain=?", (domain,)).fetchone()
+        if row and row["pdf_path"] and Path(row["pdf_path"]).exists():
+            return self._serve_file(Path(row["pdf_path"]), "text/html; charset=utf-8")
+        return self._send(404, "audit not generated yet", "text/plain")
+
+    def _serve_file(self, p: Path, ctype: str):
+        try:
+            return self._send(200, p.read_bytes(), ctype)
+        except Exception:
+            return self._send(404, "not found", "text/plain")
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        try:
+            payload = json.loads(self.rfile.read(length) or b"{}")
+        except Exception:
+            return self._send(400, '{"ok":false}', "application/json")
+        try:
+            if self.path == "/outcome":
+                res = record_outcome(int(payload["lead_id"]), str(payload["status"]),
+                                     payload.get("note", ""), payload.get("callback_at", ""))
+                log.info("logged %s for lead %s", payload["status"], payload["lead_id"])
+                return self._send(200, json.dumps(res), "application/json")
+            if self.path == "/write":
+                lid = int(payload["lead_id"])
+                out_day = OUT_DIR / dt.date.today().isoformat()
+                with db.connect() as conn:
+                    res = write.write_one(conn, lid, self.cfg, out_day, dry_run=False)
+                log.info("wrote draft for lead %s", lid)
+                return self._send(200, json.dumps({"ok": bool(res)}), "application/json")
+            return self._send(404, '{"ok":false}', "application/json")
+        except Exception as e:
+            log.error("POST %s failed: %s", self.path, e)
+            return self._send(400, json.dumps({"ok": False, "error": str(e)}), "application/json")
+
+
+def serve(port: int, limit: int, open_browser: bool = True) -> None:
+    db.init_db()
+    Handler.cfg = load_config()
+    Handler.limit = limit
+    srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    url = f"http://localhost:{port}/"
+    log.info("%s live at %s  (Ctrl+C to stop)", webui.BRAND, url)
+    if open_browser:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            pass
+    try:
+        srv.serve_forever()
+    except KeyboardInterrupt:
+        log.info("stopped")
+        srv.shutdown()
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="TDSOCH web app.")
+    ap.add_argument("--port", type=int, default=8700)
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--no-open", dest="open", action="store_false")
+    a = ap.parse_args()
+    cfg = load_config()
+    serve(a.port, a.limit or cfg.get("daily_claude_leads_cap", 25), open_browser=a.open)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
