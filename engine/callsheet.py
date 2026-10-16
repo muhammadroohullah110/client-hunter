@@ -85,9 +85,11 @@ def _local_time(city: str) -> str:
 
 
 def build_cards(conn, cfg: dict, limit: int) -> list[dict]:
+    from . import money
     price = cfg.get("offer", {}).get("price_aud", "")
     cards = []
-    for r in db.today_queue(conn, limit):
+    ranked = [l for l in money.rank_by_ev(conn, cfg, qualified_only=True) if not l.get("sold")][:limit]
+    for r in ranked:
         audit = db.audit_for(conn, r["id"])
         findings = json.loads(audit["findings_json"]) if audit and audit["findings_json"] else []
         findings.sort(key=lambda f: {"high": 0, "medium": 1, "low": 2}.get(f["severity"], 3))
@@ -105,7 +107,7 @@ def build_cards(conn, cfg: dict, limit: int) -> list[dict]:
             "website": r["website"], "phone": r["phone"], "phone_type": r["phone_type"],
             "email": (audit["emails_found"] if audit else "") or r["email"] or "",
             "city": r["city"], "local_time": _local_time(r["city"]), "niche": r["niche"],
-            "score": r["score"], "tier": r["tier"],
+            "score": r["score"], "tier": r["tier"], "ev": round(r.get("ev", 0)),
             "opener": (draft["opener"] if draft and draft["opener"] else ""),
             "findings": findings[:3], "objections": objections,
             "last_outcome": (f"{last['status']} · {last['created_at'][:16]}" if last else ""),

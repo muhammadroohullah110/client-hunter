@@ -70,6 +70,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/settings":
                 return self._send(200, webui.page("Settings", webui.settings_body(self.cfg),
                                                   self.cfg, active="settings"))
+            if path == "/money":
+                with db.connect() as conn:
+                    body = webui.money_body(conn, self.cfg)
+                return self._send(200, webui.page("Money Loop", body, self.cfg, active="money"))
             if path == "/run":
                 return self._send(200, webui.page("Run", webui.run_body(self.cfg), self.cfg, active="run"))
             if path == "/emails":

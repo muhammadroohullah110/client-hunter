@@ -25,6 +25,7 @@ _IC = {
     "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
     "run": '<polygon points="5 3 19 12 5 21 5 3"/>',
     "emails": '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
+    "money": '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
 }
 
 
@@ -34,6 +35,7 @@ def _icon(name: str) -> str:
 
 
 NAV = [("dashboard", "Dashboard", "/"),
+       ("money", "Money Loop", "/money"),
        ("run", "Run", "/run"),
        ("leads", "Leads", "/leads"),
        ("callsheet", "Call Sheet", "/callsheet"),
@@ -127,6 +129,36 @@ label.fld{display:block;margin:12px 0} label.fld .lbl{display:block;color:var(--
 .savebar{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 40%);
  padding:16px 0 4px;margin-top:8px;display:flex;gap:10px;align-items:center}
 .ok-dot{color:var(--accent)} .lead-actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}
+/* ── Money Loop ──────────────────────────────────────────────────────────── */
+.mtile .v{font-family:var(--mono);color:#fff} .mtile .v span{color:var(--accent)}
+.loop{width:260px;height:260px;max-width:100%}
+.loop .spin{transform-origin:130px 130px;animation:loopspin 14s linear infinite}
+@keyframes loopspin{to{stroke-dashoffset:-603}}
+.loop .ln{fill:var(--fg);font-size:11px;font-weight:600;font-family:'Fira Sans',sans-serif}
+.loop .ls{fill:var(--muted);font-size:8.5px;font-family:'Fira Sans',sans-serif}
+.loop .lc{fill:var(--accent);font-size:26px;font-weight:800;font-family:var(--mono)}
+.loop .lcs{fill:var(--muted);font-size:10px;font-family:'Fira Sans',sans-serif}
+.nba{display:flex;flex-direction:column;gap:6px;justify-content:center}
+.nba .k{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.nba-title{font-size:23px;font-weight:700} .nba-detail{color:var(--muted)}
+.nba .btn{align-self:flex-start;margin-top:10px}
+/* ── Apple-smooth: cross-page transitions + count-up + command palette ────── */
+@view-transition{navigation:auto}
+::view-transition-old(root){animation:fadeout .18s ease both}
+::view-transition-new(root){animation:fadein .26s cubic-bezier(.22,1,.36,1) both}
+@keyframes fadeout{to{opacity:0}} @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.main>*{animation:fadein .32s cubic-bezier(.22,1,.36,1) both}
+@media (prefers-reduced-motion:reduce){*,.main>*{animation:none!important;transition:none!important}}
+.cmdk-ov{position:fixed;inset:0;background:rgba(5,8,13,.55);backdrop-filter:blur(8px);z-index:200;
+ display:none;align-items:flex-start;justify-content:center;padding-top:13vh}
+.cmdk-ov.on{display:flex} .cmdk{width:min(580px,92vw);background:rgba(20,24,34,.96);border:1px solid var(--line);
+ border-radius:16px;box-shadow:0 40px 100px rgba(0,0,0,.6);overflow:hidden;animation:cmdkin .2s cubic-bezier(.22,1,.36,1)}
+@keyframes cmdkin{from{opacity:0;transform:translateY(-10px) scale(.97)}to{opacity:1;transform:none}}
+.cmdk input{border:none;border-bottom:1px solid var(--line);border-radius:0;font-size:17px;padding:17px 18px;background:transparent}
+.cmdk input:focus{box-shadow:none} .cmdk-list{max-height:330px;overflow:auto;padding:6px}
+.cmdk-item{display:flex;align-items:center;gap:11px;padding:11px 13px;border-radius:10px;cursor:pointer}
+.cmdk-item.sel{background:var(--panel2)} .cmdk-item .ic{color:var(--accent2);display:inline-flex}
+.cmdk-item small{color:var(--muted);margin-left:auto} .cmdk-hint{color:var(--muted);font-size:11px;padding:9px 14px;border-top:1px solid var(--line)}
 /* ── polish ───────────────────────────────────────────────────────────── */
 html{scroll-behavior:smooth} ::selection{background:rgba(45,212,167,.3)}
 *:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
@@ -206,6 +238,44 @@ function fallback(text,done){const ta=document.createElement('textarea');ta.valu
   ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){}
   ta.remove();}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-copy]');if(b)copyFrom(b.dataset.copy);});
+// count-up numbers (ease-out cubic)
+document.querySelectorAll('[data-countup]').forEach(el=>{
+  const end=parseFloat(el.dataset.countup)||0,pre=el.dataset.prefix||'',dur=750,t0=performance.now();
+  const dec=(end%1!==0)?1:0;
+  function step(t){const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);
+    el.textContent=pre+(end*e).toLocaleString(undefined,{maximumFractionDigits:dec,minimumFractionDigits:dec});
+    if(k<1)requestAnimationFrame(step);}
+  requestAnimationFrame(step);});
+// Command palette — Cmd/Ctrl+K
+const CMDS=[{t:'Dashboard',h:'',u:'/'},{t:'Money Loop',h:'expected $',u:'/money'},
+ {t:'Run the engine',h:'find leads',u:'/run'},{t:'Leads',h:'browse + filter',u:'/leads'},
+ {t:'Call Sheet',h:'your 7 AM screen',u:'/callsheet'},{t:'Emails',h:'drafts',u:'/emails'},
+ {t:'Settings',h:'AI · branding',u:'/settings'}];
+let cmdSel=0,cmdItems=[];
+function buildPalette(){if(document.getElementById('cmdkov'))return;
+  const ov=document.createElement('div');ov.className='cmdk-ov';ov.id='cmdkov';
+  ov.innerHTML='<div class="cmdk"><input id="cmdki" placeholder="Search or jump to…" autocomplete="off">'
+   +'<div class="cmdk-list" id="cmdkl"></div><div class="cmdk-hint">↑↓ move · ↵ open · esc close</div></div>';
+  document.body.appendChild(ov);
+  ov.addEventListener('click',ev=>{if(ev.target===ov)togglePalette(false);});
+  document.getElementById('cmdki').addEventListener('input',renderCmd);}
+function renderCmd(){const q=(document.getElementById('cmdki').value||'').toLowerCase();
+  cmdItems=CMDS.filter(c=>(c.t+' '+c.h).toLowerCase().includes(q));cmdSel=0;
+  document.getElementById('cmdkl').innerHTML=cmdItems.map((c,i)=>
+    '<div class="cmdk-item'+(i===0?' sel':'')+'"><span class="ic">›</span>'+c.t+'<small>'+c.h+'</small></div>').join('');
+  [...document.querySelectorAll('.cmdk-item')].forEach((el,i)=>{el.onclick=()=>go(cmdItems[i].u);el.onmouseenter=()=>setSel(i);});}
+function setSel(i){cmdSel=i;[...document.querySelectorAll('.cmdk-item')].forEach((el,j)=>el.classList.toggle('sel',j===i));}
+function go(u){location.href=u;}
+function togglePalette(on){buildPalette();const ov=document.getElementById('cmdkov');ov.classList.toggle('on',on);
+  if(on){const inp=document.getElementById('cmdki');inp.value='';renderCmd();setTimeout(()=>inp.focus(),30);}}
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();
+    togglePalette(!document.getElementById('cmdkov')||!document.getElementById('cmdkov').classList.contains('on'));return;}
+  const ov=document.getElementById('cmdkov');if(!ov||!ov.classList.contains('on'))return;
+  if(e.key==='Escape')togglePalette(false);
+  else if(e.key==='ArrowDown'){e.preventDefault();setSel(Math.min(cmdItems.length-1,cmdSel+1));}
+  else if(e.key==='ArrowUp'){e.preventDefault();setSel(Math.max(0,cmdSel-1));}
+  else if(e.key==='Enter'){e.preventDefault();if(cmdItems[cmdSel])go(cmdItems[cmdSel].u);}});
 </script>"""
 
 
@@ -227,7 +297,8 @@ def page(title: str, body: str, cfg: dict, active: str = "") -> str:
    <div class="brand"><b>TD</b>SOCH</div>
    <div class="tag">{TAGLINE}</div>
    <nav class="nav">{nav}</nav>
-   <div class="foot">{biz or 'configure business_name'}<br>{dt.date.today():%d %b %Y}</div>
+   <div class="foot">{biz or 'configure business_name'}<br>{dt.date.today():%d %b %Y}
+     <br><span class="hint" style="margin-top:6px;display:inline-block;cursor:pointer" onclick="togglePalette(true)">⌘K</span> quick nav</div>
  </aside>
  <main class="main">{body}</main>
 </div>{SHARED_JS}</body></html>"""
@@ -261,10 +332,10 @@ def dashboard_body(m: dict, cfg: dict) -> str:
     return f"""
 <div class="h1">Dashboard</div><div class="hsub">Funnel health & conversion vs targets</div>
 <div class="grid g4">
-  <div class="tile"><div class="k">Qualified</div><div class="v">{f['qualified']}</div><div class="s">of {f['found']} found</div></div>
-  <div class="tile"><div class="k">Called</div><div class="v">{f['called']}</div><div class="s">{f['conversations']} conversations</div></div>
-  <div class="tile"><div class="k">Sold</div><div class="v">{f['sold']}</div><div class="s">{f['audits_sent']} audits sent</div></div>
-  <div class="tile"><div class="k">Revenue</div><div class="v">A${m['revenue_aud']:,.0f}</div><div class="s">{pkr}</div></div>
+  <div class="tile"><div class="k">Qualified</div><div class="v"><span data-countup="{f['qualified']}">0</span></div><div class="s">of {f['found']} found</div></div>
+  <div class="tile"><div class="k">Called</div><div class="v"><span data-countup="{f['called']}">0</span></div><div class="s">{f['conversations']} conversations</div></div>
+  <div class="tile"><div class="k">Sold</div><div class="v"><span data-countup="{f['sold']}">0</span></div><div class="s">{f['audits_sent']} audits sent</div></div>
+  <div class="tile"><div class="k">Revenue</div><div class="v"><span data-countup="{m['revenue_aud']:.0f}" data-prefix="A$">0</span></div><div class="s">{pkr}</div></div>
 </div>
 <div class="grid g2" style="margin-top:14px">
   <div class="funnel"><h3 class="s">Funnel</h3>{bars}</div>
@@ -297,6 +368,7 @@ def _card(c: dict, i: int) -> str:
 <div class="card" id="card-{c['id']}" data-id="{c['id']}">
   <div class="chead"><div class="rank">{i}</div>
     <div><h2><a href="/lead/{c['id']}">{html.escape(c['name'])}</a>
+      <span class="pill" style="background:#0f3b2e;color:var(--accent)" title="expected value">${c.get('ev',0)}</span>
       <span class="pill {c['tier']}">{c['score']}/100 · {c['tier']}</span></h2>
       <div class="cmeta">{html.escape(c['city'])} · <b>{c['local_time']}</b> · {html.escape(c['niche'])}
         · <a href="{html.escape(c['website'])}" target="_blank" rel="noopener">{html.escape(c['domain'])}</a></div></div>
@@ -382,6 +454,89 @@ def _integrations_tile(cfg: dict) -> str:
      <input type="password" data-k="integrations.sheets_webhook" placeholder="paste the webhook URL" autocomplete="off">
      <span class="help">Create a Google Apps Script doPost webhook; stored in .env.</span></label>
    <div class="help" style="margin-top:8px">Email sending uses your own mail app (drafts are prepared, never auto-sent).</div></div>"""
+
+
+def money_body(conn, cfg: dict) -> str:
+    from . import money
+    p = money.pipeline(conn, cfg)
+    r = p["rates"]; cnt = r["counts"]
+    exp_closes = round(sum(l["ev"] for l in p["top_leads"]) / max(p["deal_value"], 1), 2) if p["top_leads"] else 0
+    cur = "A$"
+
+    def money_tile(label, val, sub, prefix=cur):
+        return (f'<div class="tile mtile"><div class="k">{label}</div>'
+                f'<div class="v"><span data-countup="{val}" data-prefix="{prefix}">0</span></div>'
+                f'<div class="s">{sub}</div></div>')
+
+    # The loop ring: five stages with learned rates
+    stages = [("Find", "leads in"), ("Qualify", f"{cnt['called']} called"),
+              ("Pitch", f"{int(r['conv']*100)}% reach"), ("Close", f"{int(r['close']*100)}% close"),
+              ("Deliver", f"{cnt['sold']} won")]
+    nodes = ""
+    import math
+    for i, (name, sub) in enumerate(stages):
+        ang = -90 + i * (360 / len(stages))
+        x = 130 + 96 * math.cos(math.radians(ang))
+        y = 130 + 96 * math.sin(math.radians(ang))
+        nodes += (f'<g><circle cx="{x:.0f}" cy="{y:.0f}" r="6" fill="var(--accent)"/>'
+                  f'<text x="{x:.0f}" y="{y-12:.0f}" text-anchor="middle" class="ln">{name}</text>'
+                  f'<text x="{x:.0f}" y="{y+18:.0f}" text-anchor="middle" class="ls">{html.escape(sub)}</text></g>')
+    ring = f"""<svg viewBox="0 0 260 260" class="loop">
+      <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="var(--accent2)"/><stop offset="1" stop-color="var(--accent)"/></linearGradient></defs>
+      <circle cx="130" cy="130" r="96" fill="none" stroke="var(--line)" stroke-width="2"/>
+      <circle cx="130" cy="130" r="96" fill="none" stroke="url(#lg)" stroke-width="3"
+        stroke-dasharray="36 567" stroke-linecap="round" class="spin"/>
+      <text x="130" y="122" text-anchor="middle" class="lc">{cur}{p['deal_value']:.0f}</text>
+      <text x="130" y="142" text-anchor="middle" class="lcs">per deal</text>
+      {nodes}</svg>"""
+
+    na = p["next_action"]
+    na_btn = (f'<a class="btn green" href="tel:{html.escape(na["phone"])}">Call now</a>'
+              if na.get("phone") else
+              (f'<a class="btn" href="/lead/{na["lead_id"]}">Open</a>' if na.get("lead_id")
+               else '<a class="btn" href="/run">Go to Run</a>'))
+
+    segrows = "".join(
+        f'<tr><td><b>{html.escape(s["niche"])}</b></td>'
+        f'<td><b style="color:var(--accent)">{cur}{s["ev_per_lead"]:.0f}</b></td>'
+        f'<td>{int(s["close"]*100)}%</td><td>{int(s["conv"]*100)}%</td>'
+        f'<td style="color:var(--muted)">{s["called"]} called · {s["sold"]} won</td></tr>'
+        for s in p["segments"][:8]) or '<tr><td colspan=5 style="color:var(--muted)">No niches yet.</td></tr>'
+
+    leadrows = "".join(
+        f'<tr onclick="location=\'/lead/{l["id"]}\'" style="cursor:pointer">'
+        f'<td><b style="color:var(--accent)">{cur}{l["ev"]:.0f}</b></td>'
+        f'<td><b>{html.escape(l["name"] or l["root_domain"])}</b></td>'
+        f'<td>{html.escape(l["niche"] or "")}</td><td>{l.get("score","")}</td>'
+        f'<td>{html.escape(l["phone"] or "—")}</td></tr>'
+        for l in p["top_leads"]) or '<tr><td colspan=5 style="color:var(--muted)">No open pipeline. Run the engine.</td></tr>'
+
+    learn = ('<span class="pill" style="background:#0f3b2e;color:var(--accent)">learning from your data</span>'
+             if p["learned"] else
+             '<span class="pill warm">priors — log outcomes to sharpen</span>')
+
+    return f"""<div class="h1">The Money Loop {learn}</div>
+<div class="hsub">Every lead ranked by expected dollars. The model learns from your outcomes and compounds.</div>
+<div class="grid g4">
+  {money_tile('Open pipeline', p['pipeline_value'], f"{p['open_count']} live leads, by expected value")}
+  {money_tile('Realized', p['realized'], f"{cnt['sold']} deals won")}
+  {money_tile('Expected closes', round(exp_closes,1), 'from your top open leads', prefix='')}
+  {money_tile('Avg deal value', p['deal_value'], 'price + likely care-plan')}
+</div>
+<div class="grid g2" style="margin-top:16px">
+  <div class="tile" style="display:flex;justify-content:center;align-items:center">{ring}</div>
+  <div class="tile nba">
+    <div class="k">Next best action</div>
+    <div class="nba-title">{html.escape(na['title'])}</div>
+    <div class="nba-detail">{html.escape(na['detail'])}</div>
+    {na_btn}
+  </div>
+</div>
+<h3 class="s" style="margin-top:22px">Where the money is (best niches)</h3>
+<table><tr><th>Niche</th><th>EV / lead</th><th>Close</th><th>Reach</th><th>Sample</th></tr>{segrows}</table>
+<h3 class="s" style="margin-top:22px">Top open leads by expected value</h3>
+<table><tr><th>EV</th><th>Business</th><th>Niche</th><th>Score</th><th>Phone</th></tr>{leadrows}</table>"""
 
 
 def run_body(cfg: dict) -> str:
