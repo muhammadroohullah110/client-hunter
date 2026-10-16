@@ -15,6 +15,7 @@ import argparse
 import datetime as dt
 import json
 import sys
+import threading
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -26,6 +27,10 @@ from .common import AUDIT_DIR, OUT_DIR, get_logger, load_config
 from .dashboard import metrics
 
 log = get_logger("web")
+
+# Shared state for the Run page (one pipeline at a time).
+RUN_STATE: dict = {"running": False, "log": []}
+_RUN_LOCK = threading.Lock()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -65,6 +70,16 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/settings":
                 return self._send(200, webui.page("Settings", webui.settings_body(self.cfg),
                                                   self.cfg, active="settings"))
+            if path == "/run":
+                return self._send(200, webui.page("Run", webui.run_body(self.cfg), self.cfg, active="run"))
+            if path == "/emails":
+                with db.connect() as conn:
+                    body = webui.emails_body(conn, self.cfg)
+                return self._send(200, webui.page("Emails", body, self.cfg, active="emails"))
+            if path == "/run-status":
+                return self._send(200, json.dumps(RUN_STATE), "application/json")
+            if path.startswith("/report/"):
+                return self._serve_report(urllib.parse.unquote(path[len("/report/"):]))
             if path.startswith("/lead/"):
                 lead_id = int(path.rsplit("/", 1)[1])
                 with db.connect() as conn:
@@ -119,11 +134,98 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, json.dumps({"ok": True}), "application/json")
             if self.path == "/lead-action":
                 return self._lead_action(int(payload["lead_id"]), str(payload["action"]))
+            if self.path == "/ai-test":
+                from . import ai
+                return self._send(200, json.dumps(ai.test_key(self.cfg)), "application/json")
+            if self.path == "/run-pipeline":
+                return self._start_pipeline(payload)
+            if self.path == "/write-all":
+                n = write.run()
+                return self._send(200, json.dumps({"ok": True, "count": n}), "application/json")
+            if self.path == "/prepare-emails":
+                from . import followup
+                n = followup.make_drafts()
+                return self._send(200, json.dumps({"ok": True, "count": n}), "application/json")
+            if self.path == "/mark-sent":
+                with db.connect() as conn:
+                    conn.execute("UPDATE drafts SET state='sent' WHERE lead_id=?", (int(payload["lead_id"]),))
+                return self._send(200, '{"ok":true}', "application/json")
+            if self.path == "/report":
+                return self._gen_report(int(payload["lead_id"]))
             return self._send(404, '{"ok":false}', "application/json")
         except Exception as e:
             log.error("POST %s failed: %s", self.path, e)
             return self._send(400, json.dumps({"ok": False, "error": str(e)}), "application/json")
 
+
+    def _serve_report(self, name: str):
+        # Reports live under out/<date>/reports/. Search newest-first across all
+        # date folders so a link still works the day after it was generated.
+        base = Path(name).name  # strip any path parts
+        matches = sorted(OUT_DIR.glob(f"*/reports/{base}"), reverse=True)
+        if not matches and not base.endswith((".pdf", ".html")):
+            matches = (sorted(OUT_DIR.glob(f"*/reports/{base}.pdf"), reverse=True)
+                       or sorted(OUT_DIR.glob(f"*/reports/{base}.html"), reverse=True))
+        if matches:
+            p = matches[0]
+            ct = "application/pdf" if p.suffix == ".pdf" else "text/html; charset=utf-8"
+            return self._serve_file(p, ct)
+        return self._send(404, "report not generated yet", "text/plain")
+
+    def _gen_report(self, lead_id: int):
+        from . import report
+        try:
+            with db.connect() as conn:
+                row = conn.execute("SELECT * FROM leads WHERE id=?", (lead_id,)).fetchone()
+            if not row:
+                return self._send(404, '{"ok":false,"error":"lead not found"}', "application/json")
+            res = report.generate(dict(row), self.cfg)
+            domain = dict(row)["root_domain"]
+            safe = urllib.parse.quote(domain)
+            url = f"/report/{safe}.pdf" if res.get("pdf_path") else f"/report/{safe}.html"
+            return self._send(200, json.dumps({"ok": True, "grade": res["grade"],
+                                               "overall": res["overall"], "url": url}), "application/json")
+        except Exception as e:
+            log.error("report failed: %s", e)
+            return self._send(400, json.dumps({"ok": False, "error": str(e)}), "application/json")
+
+    def _start_pipeline(self, payload: dict):
+        with _RUN_LOCK:
+            if RUN_STATE["running"]:
+                return self._send(409, json.dumps({"ok": False, "error": "already running"}), "application/json")
+            RUN_STATE["running"] = True
+            RUN_STATE["log"] = ["Starting…"]
+        cfg = self.cfg
+        cities = payload.get("cities") or None
+        niches = payload.get("niches") or None
+        limit = payload.get("limit")
+        limit = int(limit) if (limit not in (None, "", "null")) else None
+        do_psi = bool(payload.get("psi"))
+
+        def worker():
+            from . import audit as audit_mod, find as find_mod, score as score_mod
+
+            def logln(msg):
+                RUN_STATE["log"].append(msg)
+                RUN_STATE["log"] = RUN_STATE["log"][-40:]
+                log.info("[run] %s", msg)
+            try:
+                logln(f"Finding leads — cities={cities or cfg.get('cities')} niches={niches or cfg.get('niches')}")
+                n = find_mod.find(cities=cities, niches=niches, limit=limit)
+                logln(f"Found {n} new leads. Auditing…")
+                done = audit_mod.run(do_screenshot=False, do_psi=do_psi)
+                logln(f"Audited {done}. Scoring…")
+                score_mod.run()
+                with db.connect() as conn:
+                    c = db.counts(conn)
+                logln(f"Done ✓  qualified {c['qualified']} of {c['leads']} total. See Leads / Call Sheet.")
+            except Exception as e:
+                logln(f"Error: {e}")
+            finally:
+                RUN_STATE["running"] = False
+
+        threading.Thread(target=worker, daemon=True).start()
+        return self._send(200, '{"ok":true}', "application/json")
 
     def _lead_action(self, lead_id: int, action: str):
         from . import audit as audit_mod, score as score_mod

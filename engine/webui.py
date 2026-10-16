@@ -23,6 +23,8 @@ _IC = {
     "callsheet": '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z"/>',
     "leads": '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
     "settings": '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+    "run": '<polygon points="5 3 19 12 5 21 5 3"/>',
+    "emails": '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
 }
 
 
@@ -32,8 +34,10 @@ def _icon(name: str) -> str:
 
 
 NAV = [("dashboard", "Dashboard", "/"),
-       ("callsheet", "Call Sheet", "/callsheet"),
+       ("run", "Run", "/run"),
        ("leads", "Leads", "/leads"),
+       ("callsheet", "Call Sheet", "/callsheet"),
+       ("emails", "Emails", "/emails"),
        ("settings", "Settings", "/settings")]
 
 CSS = """
@@ -170,6 +174,11 @@ async function logOutcome(id, outcome){
 }
 async function writeDraft(id){const r=await fetch('/write',{method:'POST',headers:{'Content-Type':'application/json'},
   body:JSON.stringify({lead_id:id})}); if(r.ok)location.reload(); else alert('Write failed.');}
+async function genReport(id,btn){
+  btn.disabled=true;const t=btn.textContent;btn.textContent='Building report…';
+  const r=await fetch('/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lead_id:id})});
+  const j=await r.json();btn.disabled=false;btn.textContent=t;
+  if(j.ok){toast('Report ready — grade '+j.grade);window.open(j.url,'_blank');}else toast('Report failed: '+(j.error||''));}
 async function leadAction(id,action,btn){
   if(action==='suppress'&&!confirm('Suppress this lead — never contact again?'))return;
   if(btn){btn.disabled=true;btn.textContent=(action==='reaudit'?'Re-auditing…':'Working…');}
@@ -320,6 +329,130 @@ def callsheet_body(cards: list[dict]) -> str:
 
 
 # ── Leads table ──────────────────────────────────────────────────────────────────
+def _ai_tile(cfg: dict) -> str:
+    from . import ai
+    a = cfg.get("ai", {}); has_key = bool(ai.api_key())
+    providers = ["groq", "openrouter", "openai", "together"]
+    cur = a.get("provider", "groq")
+    opts = "".join(f'<option value="{p}" {"selected" if p==cur else ""}>{p}</option>' for p in providers)
+    keyph = "•••••••• (saved — leave blank to keep)" if has_key else "paste your API key"
+    enabled = "checked" if a.get("enabled") else ""
+    return f"""<div class="tile"><h3 class="s">AI (optional — bring your own key)</h3>
+   <label class="fld" style="display:flex;align-items:center;gap:10px;margin:4px 0">
+     <input type="checkbox" data-k="ai.enabled" {enabled} style="width:auto">
+     <span class="lbl" style="margin:0">Enable AI (sharper audits, openers)</span></label>
+   <label class="fld"><span class="lbl">Provider</span>
+     <select data-k="ai.provider">{opts}</select>
+     <span class="help">groq & openrouter have free tiers. Get a free key at console.groq.com or openrouter.ai</span></label>
+   <label class="fld"><span class="lbl">API key</span>
+     <input type="password" data-k="ai.api_key" placeholder="{keyph}" autocomplete="off"></label>
+   <label class="fld"><span class="lbl">Model (blank = provider default)</span>
+     <input type="text" data-k="ai.model" value="{html.escape(str(a.get('model','')))}" placeholder="e.g. openai/gpt-oss-120b"></label>
+   <button class="btn ghost sm" type="button" onclick="testAI(this)">Test connection</button>
+   <span id="ai-test" class="help"></span></div>"""
+
+
+def _branding_tile(cfg: dict) -> str:
+    b = cfg.get("branding", {})
+    def f(key, label, help=""):
+        return (f'<label class="fld"><span class="lbl">{html.escape(label)}</span>'
+                f'<input type="text" data-k="branding.{key}" value="{html.escape(str(b.get(key,"") or ""))}">'
+                + (f'<span class="help">{html.escape(help)}</span>' if help else '') + '</label>')
+    return f"""<div class="tile"><h3 class="s">PDF report branding</h3>
+   <div style="display:flex;gap:10px">
+     <label class="fld" style="flex:1"><span class="lbl">Brand colour</span>
+       <input type="color" data-k="branding.brand_color" value="{html.escape(b.get('brand_color','#2563EB'))}" style="height:40px;padding:3px"></label>
+     <label class="fld" style="flex:1"><span class="lbl">Accent colour</span>
+       <input type="color" data-k="branding.accent_color" value="{html.escape(b.get('accent_color','#059669'))}" style="height:40px;padding:3px"></label>
+   </div>
+   {f('logo_url','Logo URL','Link to your logo image (optional)')}
+   {f('tagline','Tagline')}
+   {f('whatsapp','WhatsApp number','e.g. 61412345678 — adds a WhatsApp button to the report')}
+   {f('website','Website')}</div>"""
+
+
+def _integrations_tile(cfg: dict) -> str:
+    ig = cfg.get("integrations", {})
+    on = "checked" if ig.get("sheets_webhook_enabled") else ""
+    return f"""<div class="tile"><h3 class="s">Integrations</h3>
+   <label class="fld" style="display:flex;align-items:center;gap:10px;margin:4px 0">
+     <input type="checkbox" data-k="integrations.sheets_webhook_enabled" {on} style="width:auto">
+     <span class="lbl" style="margin:0">Export leads to Google Sheet</span></label>
+   <label class="fld"><span class="lbl">Sheets webhook URL (Apps Script /exec)</span>
+     <input type="password" data-k="integrations.sheets_webhook" placeholder="paste the webhook URL" autocomplete="off">
+     <span class="help">Create a Google Apps Script doPost webhook; stored in .env.</span></label>
+   <div class="help" style="margin-top:8px">Email sending uses your own mail app (drafts are prepared, never auto-sent).</div></div>"""
+
+
+def run_body(cfg: dict) -> str:
+    cities = "\n".join(cfg.get("cities", []))
+    niches = "\n".join(cfg.get("niches", []))
+    return f"""<div class="h1">Run the engine</div>
+<div class="hsub">Type any cities &amp; niches, hit run — it finds → audits → scores in the background.</div>
+<div class="grid g2">
+ <div class="tile"><h3 class="s">Your query</h3>
+   <label class="fld"><span class="lbl">Cities (one per line)</span><textarea id="r-cities" rows="4">{html.escape(cities)}</textarea></label>
+   <label class="fld"><span class="lbl">Niches (one per line)</span><textarea id="r-niches" rows="5">{html.escape(niches)}</textarea>
+     <span class="help">dentist · physiotherapist · accountant · plumber · electrician (these map to OSM tags)</span></label>
+   <label class="fld"><span class="lbl">Max leads to find (blank = target from Settings)</span><input id="r-limit" type="number" placeholder="e.g. 40"></label>
+   <label class="fld" style="display:flex;gap:10px;align-items:center"><input id="r-psi" type="checkbox" style="width:auto"><span class="lbl" style="margin:0">Run PageSpeed (slower; needs PSI key)</span></label>
+   <div style="display:flex;gap:10px;margin-top:8px">
+     <button class="btn green" onclick="runPipeline()" id="r-btn">▶ Run now</button>
+     <button class="btn ghost" onclick="writeAll()">Write drafts for the queue</button></div>
+ </div>
+ <div class="tile"><h3 class="s">Status</h3>
+   <div id="r-status" class="mono" style="min-height:220px">Idle. Set your query and press Run.</div></div>
+</div>
+<script>
+let poll=null;
+async function runPipeline(){{
+  const body={{cities:document.getElementById('r-cities').value.split(/\\n+/).map(s=>s.trim()).filter(Boolean),
+    niches:document.getElementById('r-niches').value.split(/\\n+/).map(s=>s.trim()).filter(Boolean),
+    limit:document.getElementById('r-limit').value||null, psi:document.getElementById('r-psi').checked}};
+  document.getElementById('r-btn').disabled=true;
+  const r=await fetch('/run-pipeline',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});
+  if(!r.ok){{toast('Could not start');document.getElementById('r-btn').disabled=false;return;}}
+  toast('Running…');if(poll)clearInterval(poll);poll=setInterval(checkStatus,1500);checkStatus();}}
+async function checkStatus(){{const r=await fetch('/run-status');const j=await r.json();
+  document.getElementById('r-status').textContent=(j.log||[]).join('\\n')||'…';
+  if(!j.running){{clearInterval(poll);document.getElementById('r-btn').disabled=false;}}}}
+async function writeAll(){{toast('Writing drafts…');const r=await fetch('/write-all',{{method:'POST'}});
+  const j=await r.json();toast('Wrote '+(j.count||0)+' drafts');}}
+checkStatus();
+</script>"""
+
+
+def emails_body(conn, cfg: dict) -> str:
+    rows = conn.execute("""
+        SELECT d.lead_id,d.email_subject,d.state,d.pdf_path,l.name,l.root_domain,l.email,
+               (SELECT emails_found FROM audits a WHERE a.lead_id=d.lead_id) af
+        FROM drafts d JOIN leads l ON l.id=d.lead_id
+        WHERE d.email_subject IS NOT NULL AND d.email_subject<>'' ORDER BY d.created_at DESC""").fetchall()
+    trs = ""
+    for r in rows:
+        to = (r["af"] or r["email"] or "").split(",")[0].strip() or "—"
+        badge = {"draft": "pill", "ready": "pill warm", "drafted": "pill hot",
+                 "sent": "pill"}.get(r["state"], "pill")
+        trs += (f'<tr><td><a href="/lead/{r["lead_id"]}"><b>{html.escape(r["name"] or r["root_domain"])}</b></a><br>'
+                f'<span style="color:var(--muted);font-size:11px">{html.escape(to)}</span></td>'
+                f'<td>{html.escape(r["email_subject"] or "")}</td>'
+                f'<td><span class="{badge}">{html.escape(r["state"] or "draft")}</span></td>'
+                f'<td style="white-space:nowrap">'
+                f'<button class="btn ghost sm" onclick="location=\'/lead/{r["lead_id"]}\'">Open</button> '
+                f'<button class="btn ghost sm" onclick="markSent({r["lead_id"]},this)">Mark sent</button></td></tr>')
+    return f"""<div class="h1">Emails</div><div class="hsub">{len(rows)} drafted · prepared for you to review and send yourself (never auto-sent)</div>
+<div class="toolbar">
+  <button class="btn green sm" onclick="prepEml()">Prepare .eml files (for SEND_AUDIT / SOLD)</button>
+  <span class="help">.eml files open in Outlook / Gmail / any mail app with the audit attached.</span></div>
+<table><tr><th>To</th><th>Subject</th><th>Status</th><th>Actions</th></tr>
+{trs or '<tr><td colspan=4 style="color:var(--muted);padding:20px">No email drafts yet. Run the engine, then "Write drafts".</td></tr>'}</table>
+<script>
+async function markSent(id,btn){{btn.disabled=true;const r=await fetch('/mark-sent',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{lead_id:id}})}});
+  if(r.ok){{toast('Marked sent');setTimeout(()=>location.reload(),400);}}else btn.disabled=false;}}
+async function prepEml(){{toast('Preparing .eml…');const r=await fetch('/prepare-emails',{{method:'POST'}});const j=await r.json();toast('Prepared '+(j.count||0)+' file(s)');}}
+</script>"""
+
+
 def settings_body(cfg: dict) -> str:
     q = cfg.get("qualify", {}); gates = q.get("gates", {}); offer = cfg.get("offer", {})
     dash = cfg.get("dashboard", {})
@@ -370,9 +503,12 @@ def settings_body(cfg: dict) -> str:
    {toggle('qualify.gates.require_fixable_problem','Has a fixable problem',gates.get('require_fixable_problem',True))}
    {toggle('qualify.gates.require_ability_to_pay','Can pay',gates.get('require_ability_to_pay',True))}
  </div>
+ {_ai_tile(cfg)}
+ {_branding_tile(cfg)}
+ {_integrations_tile(cfg)}
 </div>
 <div class="savebar"><button class="btn green" onclick="saveSettings()">Save settings</button>
- <span class="help">Changes apply to the next run / page refresh.</span></div>
+ <span class="help">Changes apply to the next run / page refresh. API keys are stored in .env (never committed).</span></div>
 <script>
 async function saveSettings(){{const data={{}};
   document.querySelectorAll('[data-k]').forEach(el=>{{
@@ -380,6 +516,11 @@ async function saveSettings(){{const data={{}};
     data[el.dataset.k]=v;}});
   const r=await fetch('/settings',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(data)}});
   if(r.ok)toast('Settings saved ✓');else toast('Save failed');}}
+async function testAI(btn){{btn.disabled=true;const el=document.getElementById('ai-test');
+  el.textContent=' Saving + testing…';el.style.color='var(--muted)';
+  await saveSettings();
+  const r=await fetch('/ai-test',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:'{{}}'}});
+  const j=await r.json();el.textContent=' '+(j.msg||'');el.style.color=j.ok?'var(--accent)':'var(--hot)';btn.disabled=false;}}
 </script>"""
 
 
@@ -487,6 +628,7 @@ def lead_detail_body(conn, lead_id: int) -> str:
 <div class="hsub"><a href="{html.escape(lead['website'])}" target="_blank">{html.escape(lead['website'])}</a></div>
 <div class="lead-actions">
   <button class="btn green sm" onclick="writeDraft({lead_id})">{'Re-write' if dr else 'Write'} opener + email + DM</button>
+  <button class="btn sm" onclick="genReport({lead_id},this)">Generate audit report (PDF)</button>
   <button class="btn ghost sm" onclick="leadAction({lead_id},'reaudit',this)">Re-audit now</button>
   <button class="btn danger sm" onclick="leadAction({lead_id},'suppress',this)">Suppress (never contact)</button>
 </div>

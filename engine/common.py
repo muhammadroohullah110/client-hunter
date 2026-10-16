@@ -70,11 +70,47 @@ def _coerce(v):
     return s
 
 
+# Settings fields that are SECRETS — stored in .env (git-ignored), never config.yaml.
+SECRET_FIELDS = {
+    "ai.api_key": "AI_API_KEY",
+    "integrations.sheets_webhook": "SHEETS_WEBHOOK",
+    "psi_key": "PSI_KEY",
+}
+
+
+def set_env_var(name: str, value: str) -> None:
+    """Update or append NAME=value in .env, and reflect it in os.environ now."""
+    name = name.strip()
+    value = "" if value is None else str(value)
+    lines, found = [], False
+    try:
+        with open(ENV_PATH, encoding="utf-8") as f:
+            for line in f:
+                if line.strip() and not line.lstrip().startswith("#") and line.split("=", 1)[0].strip() == name:
+                    lines.append(f"{name}={value}\n"); found = True
+                else:
+                    lines.append(line if line.endswith("\n") else line + "\n")
+    except OSError:
+        pass
+    if not found:
+        lines.append(f"{name}={value}\n")
+    with open(ENV_PATH, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+    os.environ[name] = value
+
+
 def save_config(updates: dict) -> dict:
     """Apply dotted-key updates (e.g. 'offer.price_aud') to config.yaml, write it
-    back (order preserved), refresh the cache, and return the new config."""
+    back (order preserved), refresh the cache, and return the new config.
+    Secret fields (API keys / webhooks) are routed to .env instead."""
     import copy
     global _CONFIG_CACHE
+    updates = dict(updates)
+    for dotted, env_name in SECRET_FIELDS.items():
+        if dotted in updates:
+            val = updates.pop(dotted)
+            if val not in (None, "", "••••••••"):   # don't overwrite with the masked placeholder
+                set_env_var(env_name, val)
     new = copy.deepcopy(load_config())
     for dotted, val in updates.items():
         parts = str(dotted).split(".")

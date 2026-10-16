@@ -75,3 +75,25 @@ crawl:
   max_pages_per_site: 3
   # PageSpeed is OFF by default (slow; throttled without a free PSI_KEY).
   pagespeed: false
+
+# ── Optional AI (bring your own key; OFF by default = zero cost) ─────────────
+# The API key is set in the Settings page and stored in .env (never here/git).
+# Free options: provider "groq" (fast, free tier) or "openrouter" (free models).
+ai:
+  enabled: false
+  provider: groq          # groq | openrouter | openai | together
+  model: ""               # blank = provider default
+  fallback_models: []
+
+# ── PDF report branding (shown on the audit report you send prospects) ───────
+branding:
+  brand_color: "#2563EB"  # primary (blue)
+  accent_color: "#059669" # accent (green)
+  logo_url: ""            # link to your logo (optional)
+  tagline: "Fast, modern websites that win more customers"
+  whatsapp: ""            # e.g. 61XXXXXXXXX  (shown as a CTA button on the report)
+  website: ""
+
+# ── Integrations (optional, for autonomous-ish working) ──────────────────────
+integrations:
+  sheets_webhook_enabled: false   # Google Apps Script webhook URL set in Settings (.env)
